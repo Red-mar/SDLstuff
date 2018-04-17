@@ -9,9 +9,21 @@
 #define SCREEN_HEIGHT 640
 #define SCREEN_WIDTH 480
 
+const int BUTTON_WIDTH = 100;
+const int BUTTON_HEIGHT = 100;
+const int TOTAL_BUTTONS = 4;
+
 SDL_Window *screen = NULL;
 SDL_Renderer * sdlRenderer = NULL;
 TTF_Font *gFont = NULL;
+
+enum LButtonSprite{
+    BUTTON_SPRITE_MOUSE_OUT = 0,
+    BUTTON_SPRITE_MOUSE_OVER_MOTION = 1,
+    BUTTON_SPRITE_MOUSE_DOWN = 2,
+    BUTTON_SPRITE_MOUSE_UP = 3,
+    BUTTON_SPRITE_TOTAL = 4
+};
 
 class LTexture
 {
@@ -21,7 +33,9 @@ class LTexture
 
         bool loadFromFile( std::string path);
 
+        #ifdef _SDL_TTF_H
         bool loadFromRenderedText( std::string textureText, SDL_Color textColor);
+        #endif
 
         void free();
 
@@ -80,6 +94,7 @@ bool LTexture::loadFromFile( std::string path)
     return mTexture != NULL;
 }
 
+#ifdef _SDL_TTF_H
 bool LTexture::loadFromRenderedText( std::string textureText, SDL_Color textColor){
     free();
     SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, textureText.c_str(), textColor);
@@ -101,6 +116,7 @@ bool LTexture::loadFromRenderedText( std::string textureText, SDL_Color textColo
 
     return mTexture != NULL;
 }
+#endif
 
 void LTexture::free(){
     if (mTexture != NULL)
@@ -142,11 +158,95 @@ int LTexture::getWidth(){
     return mWidth;
 }
 
+class LButton
+{
+    public:
+        LButton();
+
+        void setPosition(int x, int y);
+
+        void handleEvent(SDL_Event* e);
+
+        void render();
+
+    private:
+        SDL_Point mPosition;
+        LButtonSprite mCurrentSprite;
+};
+
+LButton::LButton()
+{
+    mPosition.x = 0;
+    mPosition.y = 0;
+    mCurrentSprite = BUTTON_SPRITE_MOUSE_OUT;
+}
+
+void LButton::setPosition(int x, int y){
+    mPosition.x = x;
+    mPosition.y = y;
+}
+
+void LButton::handleEvent( SDL_Event* e)
+{
+    if (e->type == SDL_MOUSEMOTION || e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP)
+    {
+        int x, y;
+        SDL_GetMouseState( &x, &y);
+
+        bool inside = true;
+
+        if (x < mPosition.x)
+        {
+            inside = false;
+        }
+        else if(x > mPosition.x + BUTTON_WIDTH)
+        {
+            inside = false;
+        }
+        else if(y < mPosition.y)
+        {
+            inside = false;
+        }
+        else if (y > mPosition.y + BUTTON_HEIGHT)
+        {
+            inside = false;
+        }
+
+        if (!inside)
+        {
+            mCurrentSprite = BUTTON_SPRITE_MOUSE_OUT;
+        }
+        else {
+            switch (e->type)
+            {
+            case SDL_MOUSEMOTION:
+            mCurrentSprite = BUTTON_SPRITE_MOUSE_OVER_MOTION;
+            break;
+
+            case SDL_MOUSEBUTTONDOWN:
+            mCurrentSprite = BUTTON_SPRITE_MOUSE_DOWN;
+            break;
+
+            case SDL_MOUSEBUTTONUP:
+            mCurrentSprite = BUTTON_SPRITE_MOUSE_UP;
+            break;
+            }
+        }
+    }
+}
+
 const int WALKING_ANIMATION_FRAMES = 4;
 SDL_Rect gSpriteClips[WALKING_ANIMATION_FRAMES];
+LButton gButtons[BUTTON_SPRITE_TOTAL];
 LTexture gTexture;
 LTexture gBackgroundTexture;
 LTexture gTextTexture;
+
+void LButton::render(){
+    gTexture.render(mPosition.x, mPosition.y, &gSpriteClips[ mCurrentSprite]);
+}
+
+
 
 bool init(){
     SDL_Init(SDL_INIT_EVERYTHING);
@@ -203,7 +303,37 @@ bool loadMedia(){
     } else {
         gTexture.setBlendMode(SDL_BLENDMODE_BLEND);
 
+                //Set top left sprite
+        gSpriteClips[ 0 ].x =   0;
+        gSpriteClips[ 0 ].y =   0;
+        gSpriteClips[ 0 ].w = 100;
+        gSpriteClips[ 0 ].h = 100;
+
+        gButtons[0] = LButton();
+
+        //Set top right sprite
+        gSpriteClips[ 1 ].x = 100;
+        gSpriteClips[ 1 ].y =   0;
+        gSpriteClips[ 1 ].w = 100;
+        gSpriteClips[ 1 ].h = 100;
+
+        gButtons[1] = LButton();
         
+        //Set bottom left sprite
+        gSpriteClips[ 2 ].x =   0;
+        gSpriteClips[ 2 ].y = 100;
+        gSpriteClips[ 2 ].w = 100;
+        gSpriteClips[ 2 ].h = 100;
+
+        gButtons[2] = LButton();
+
+        //Set bottom right sprite
+        gSpriteClips[ 3 ].x = 100;
+        gSpriteClips[ 3 ].y = 100;
+        gSpriteClips[ 3 ].w = 100;
+        gSpriteClips[ 3 ].h = 100;
+
+        gButtons[3] = LButton();
     }
 
     return success;
@@ -249,19 +379,10 @@ int main(int argc, char* args[])
         printf_s("Failed loading media files.\n");
     }
 
-    int frame = 0;
-    double degrees = 0;
-        SDL_RendererFlip flipType = SDL_FLIP_NONE;
+    LButtonSprite sprite = BUTTON_SPRITE_MOUSE_DOWN;
 
     while (1){
-        ++frame;
-        if (frame / 4 >= WALKING_ANIMATION_FRAMES)
-        {
-            frame = 0;
-        }
 
-        
-         
         SDL_Event e;
         if (SDL_PollEvent(&e))
         {
@@ -270,39 +391,30 @@ int main(int argc, char* args[])
                 break;
             } else if (e.type == SDL_KEYDOWN)
             {
-                switch (e.key.keysym.sym)
-                {
-                    case SDLK_a:
-                    degrees -= 60;
-                    break;
-                    case SDLK_d:
-                    degrees += 60;
-                    case SDLK_q:
-                    flipType = SDL_FLIP_HORIZONTAL;
-                    break;
-                    case SDLK_w:
-                    flipType = SDL_FLIP_NONE;
-                    break;
-                    case SDLK_e:
-                    flipType = SDL_FLIP_VERTICAL;
-                    break;
-
-                default:
-
-                    break;
-                }
+                
             }
         }
+
+        const Uint8* currentKeyStates = SDL_GetKeyboardState( NULL );
+        if (currentKeyStates[SDL_SCANCODE_UP])
+        {
+            sprite = BUTTON_SPRITE_MOUSE_OUT;
+        } else if (currentKeyStates[SDL_SCANCODE_DOWN])
+        {
+            sprite = BUTTON_SPRITE_MOUSE_OVER_MOTION;
+        } else if (currentKeyStates[SDL_SCANCODE_LEFT])
+        {
+            sprite = BUTTON_SPRITE_MOUSE_UP;
+        } else {
+            sprite = BUTTON_SPRITE_MOUSE_DOWN;
+        }
+
         SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
         SDL_RenderClear(sdlRenderer);
         
         //SDL_Rect* currentClip = &gSpriteClips[frame / 4];
         //gTexture.render((SCREEN_WIDTH - currentClip->w) / 2, (SCREEN_HEIGHT - currentClip->h)/2, currentClip);
-
-
-        gTexture.render(0,0, NULL, degrees, NULL, flipType);
-
-        gTextTexture.render(100,100);
+        gTexture.render(0,0,&gSpriteClips[sprite]);
 
         SDL_RenderPresent(sdlRenderer);
     }
