@@ -15,7 +15,7 @@ REM /LIBPATH: specifies the path
 
 REM D:\CProject
 REM C:\Users\a\Desktop\git\SDLstuff
-set CommonLinkerFlags=-opt:ref /LIBPATH:"D:\CProject" include\SDL2.lib include\SDL2main.lib include\SDL2_image.lib include\SDL2_ttf.lib include\SDL2_mixer.lib User32.lib Gdi32.lib /SUBSYSTEM:CONSOLE
+set CommonLinkerFlags=-opt:ref /LIBPATH:"D:\CProject" include\SDL2.lib include\SDL2main.lib include\SDL2_image.lib include\SDL2_ttf.lib include\SDL2_mixer.lib User32.lib Gdi32.lib /SUBSYSTEM:WINDOWS
 
 mkdir build
 pushd build

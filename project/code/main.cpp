@@ -266,7 +266,7 @@ bool init(){
         printf_s("error initializing");
         return false;
     }
-    screen = SDL_CreateWindow("My first window", SDL_WINDOWPOS_UNDEFINED, 1080 - SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_SWSURFACE | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_BORDERLESS);
+    screen = SDL_CreateWindow("My first window", SDL_WINDOWPOS_UNDEFINED, 1080 - SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_SWSURFACE | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_SKIP_TASKBAR);
     if (screen == NULL)
     {
         printf_s("Window could not be created. error: %s\n", SDL_GetError());
