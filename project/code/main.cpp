@@ -1,13 +1,15 @@
 #include "SDL.h"
 #include "SDL_image.h"
 #include "SDL_ttf.h"
+#include "SDL_mixer.h"
 
-#include "stdio.h"
+#include <sstream>
+#include <stdio.h>
 #include <string>
 #include <cmath>
 
-#define SCREEN_HEIGHT 640
-#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 800
+#define SCREEN_WIDTH 600
 
 const int BUTTON_WIDTH = 100;
 const int BUTTON_HEIGHT = 100;
@@ -16,6 +18,13 @@ const int TOTAL_BUTTONS = 4;
 SDL_Window *screen = NULL;
 SDL_Renderer * sdlRenderer = NULL;
 TTF_Font *gFont = NULL;
+
+Mix_Music *gMusic = NULL;
+
+Mix_Chunk *gScratch = NULL;
+Mix_Chunk *gHigh = NULL;
+Mix_Chunk *gMedium = NULL;
+Mix_Chunk *gLow = NULL;
 
 enum LButtonSprite{
     BUTTON_SPRITE_MOUSE_OUT = 0,
@@ -249,7 +258,11 @@ void LButton::render(){
 
 
 bool init(){
-    SDL_Init(SDL_INIT_EVERYTHING);
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0)
+    {
+        printf_s("error initializing");
+        return false;
+    }
 
     screen = SDL_CreateWindow("My first window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_SWSURFACE);
     if (screen == NULL)
@@ -276,27 +289,40 @@ bool init(){
         printf_s("TTF could not initialize, Error %s\n",TTF_GetError());
         return false;
     }
+    if (Mix_OpenAudio( 44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
+    {
+        printf_s("error initializing audio");
+        return false;
+    }
+
     return true;
 }
 
 bool loadMedia(){
     bool success = true;
 
-    gFont = TTF_OpenFont("OpenSans-Regular.ttf", 72);
+    gFont = TTF_OpenFont("OpenSans-Regular.ttf", 28);
     if (gFont == NULL)
     {
         printf_s("Failed to load font, Error %s\n", TTF_GetError());
         success = false;
     } else {
-        SDL_Color textColor = {0,0,0};
-        if (!gTextTexture.loadFromRenderedText("DIT IS EEN STUK TEXT", textColor)){
+        SDL_Color textColor = {0,0,0,255};
+        if (!gTextTexture.loadFromRenderedText("Press enter to reset start time.", textColor)){
             printf_s("Failed to render text texture\n");
             success = false;
         }
     }
 
+    gScratch = Mix_LoadWAV("wololo.wav");
+    if (gScratch == NULL)
+    {
+        printf_s("failed loading woololo");
+        success = false;
+    }
 
-    if (!gTexture.loadFromFile("hello2.png"))
+
+    if (!gTexture.loadFromFile("hello.png"))
     {
         printf_s("failed load sprites");
         success = false;
@@ -306,32 +332,32 @@ bool loadMedia(){
                 //Set top left sprite
         gSpriteClips[ 0 ].x =   0;
         gSpriteClips[ 0 ].y =   0;
-        gSpriteClips[ 0 ].w = 100;
-        gSpriteClips[ 0 ].h = 100;
+        gSpriteClips[ 0 ].w = 500;
+        gSpriteClips[ 0 ].h = 500;
 
         gButtons[0] = LButton();
 
         //Set top right sprite
-        gSpriteClips[ 1 ].x = 100;
+        gSpriteClips[ 1 ].x = 500;
         gSpriteClips[ 1 ].y =   0;
-        gSpriteClips[ 1 ].w = 100;
-        gSpriteClips[ 1 ].h = 100;
+        gSpriteClips[ 1 ].w = 500;
+        gSpriteClips[ 1 ].h = 500;
 
         gButtons[1] = LButton();
         
         //Set bottom left sprite
         gSpriteClips[ 2 ].x =   0;
-        gSpriteClips[ 2 ].y = 100;
-        gSpriteClips[ 2 ].w = 100;
-        gSpriteClips[ 2 ].h = 100;
+        gSpriteClips[ 2 ].y = 500;
+        gSpriteClips[ 2 ].w = 500;
+        gSpriteClips[ 2 ].h = 500;
 
         gButtons[2] = LButton();
 
         //Set bottom right sprite
-        gSpriteClips[ 3 ].x = 100;
-        gSpriteClips[ 3 ].y = 100;
-        gSpriteClips[ 3 ].w = 100;
-        gSpriteClips[ 3 ].h = 100;
+        gSpriteClips[ 3 ].x = 500;
+        gSpriteClips[ 3 ].y = 500;
+        gSpriteClips[ 3 ].w = 500;
+        gSpriteClips[ 3 ].h = 500;
 
         gButtons[3] = LButton();
     }
@@ -340,6 +366,19 @@ bool loadMedia(){
 }
 
 void close(){
+    Mix_FreeChunk(gScratch);
+    Mix_FreeChunk(gHigh);
+    Mix_FreeChunk(gMedium);
+    Mix_FreeChunk(gLow);
+
+    gScratch = NULL;
+    gHigh = NULL;
+    gMedium = NULL;
+    gLow = NULL;
+
+    Mix_FreeMusic(gMusic);
+    gMusic = NULL;
+
     gBackgroundTexture.free();
     gTexture.free();
     gTextTexture.free();
@@ -349,6 +388,7 @@ void close(){
     SDL_DestroyWindow(screen);
     sdlRenderer = NULL;
     screen = NULL;
+    Mix_Quit();
     TTF_Quit();
     SDL_Quit();
     IMG_Quit();
@@ -380,8 +420,13 @@ int main(int argc, char* args[])
     }
 
     LButtonSprite sprite = BUTTON_SPRITE_MOUSE_DOWN;
+    Uint32 startTime = 0;
 
     while (1){
+
+        SDL_Color textColor = {0, 0, 0, 255};
+        
+        std::stringstream timeText;
 
         SDL_Event e;
         if (SDL_PollEvent(&e))
@@ -399,14 +444,30 @@ int main(int argc, char* args[])
         if (currentKeyStates[SDL_SCANCODE_UP])
         {
             sprite = BUTTON_SPRITE_MOUSE_OUT;
+            Mix_PlayChannel(-1, gScratch, 0);
         } else if (currentKeyStates[SDL_SCANCODE_DOWN])
         {
             sprite = BUTTON_SPRITE_MOUSE_OVER_MOTION;
+            Mix_PlayChannel(-1, gScratch, 0);
         } else if (currentKeyStates[SDL_SCANCODE_LEFT])
         {
             sprite = BUTTON_SPRITE_MOUSE_UP;
-        } else {
+            Mix_PlayChannel(-1, gScratch, 0);
+        } else if (currentKeyStates[SDL_SCANCODE_KP_ENTER])
+        {
+            startTime = SDL_GetTicks();
+        } 
+        else {
             sprite = BUTTON_SPRITE_MOUSE_DOWN;
+        }
+
+        timeText.str("");
+        timeText << "Milliseconds since start time " << SDL_GetTicks() - startTime;
+
+
+        if (!gTexture.loadFromRenderedText(timeText.str().c_str(), textColor))
+        {
+            printf_s("cannot render text");
         }
 
         SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
@@ -414,7 +475,9 @@ int main(int argc, char* args[])
         
         //SDL_Rect* currentClip = &gSpriteClips[frame / 4];
         //gTexture.render((SCREEN_WIDTH - currentClip->w) / 2, (SCREEN_HEIGHT - currentClip->h)/2, currentClip);
-        gTexture.render(0,0,&gSpriteClips[sprite]);
+        //gTexture.render(0,0,&gSpriteClips[sprite]);
+        gTexture.render((SCREEN_WIDTH - gTexture.getWidth()) / 2, 0);
+        gTextTexture.render((SCREEN_WIDTH - gTexture.getWidth())/2, (SCREEN_HEIGHT - gTexture.getHeight() ) / 2);
 
         SDL_RenderPresent(sdlRenderer);
     }
