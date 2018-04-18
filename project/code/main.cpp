@@ -2,14 +2,17 @@
 #include "SDL_image.h"
 #include "SDL_ttf.h"
 #include "SDL_mixer.h"
+#include "SDL_syswm.h"
+
+#include <windows.h>
 
 #include <sstream>
 #include <stdio.h>
 #include <string>
 #include <cmath>
 
-#define SCREEN_HEIGHT 800
-#define SCREEN_WIDTH 600
+#define SCREEN_HEIGHT 250
+#define SCREEN_WIDTH 250
 
 const int BUTTON_WIDTH = 100;
 const int BUTTON_HEIGHT = 100;
@@ -263,8 +266,7 @@ bool init(){
         printf_s("error initializing");
         return false;
     }
-
-    screen = SDL_CreateWindow("My first window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_SWSURFACE);
+    screen = SDL_CreateWindow("My first window", SDL_WINDOWPOS_UNDEFINED, 1080 - SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_SWSURFACE | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_BORDERLESS);
     if (screen == NULL)
     {
         printf_s("Window could not be created. error: %s\n", SDL_GetError());
@@ -276,7 +278,7 @@ bool init(){
         printf_s("Renderer could not be created. error: %s\n", SDL_GetError());
         return false;
     }
-    SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+    //SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
 
     int imgFlags = IMG_INIT_PNG;
     if (!(IMG_Init(imgFlags) & imgFlags))
@@ -294,7 +296,6 @@ bool init(){
         printf_s("error initializing audio");
         return false;
     }
-
     return true;
 }
 
@@ -322,44 +323,92 @@ bool loadMedia(){
     }
 
 
-    if (!gTexture.loadFromFile("hello.png"))
+    if (!gTexture.loadFromFile("hello.bmp"))
     {
         printf_s("failed load sprites");
         success = false;
     } else {
         gTexture.setBlendMode(SDL_BLENDMODE_BLEND);
+    }
 
-                //Set top left sprite
-        gSpriteClips[ 0 ].x =   0;
-        gSpriteClips[ 0 ].y =   0;
-        gSpriteClips[ 0 ].w = 500;
-        gSpriteClips[ 0 ].h = 500;
+    LPCSTR lpcstr = "hello.bmp";
 
-        gButtons[0] = LButton();
+    HBITMAP hBmp = (HBITMAP) LoadImage(GetModuleHandle(NULL), lpcstr, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    if (!hBmp)
+    {
+        printf_s("could not load hBmp\n");
+        success = false;
+    }
 
-        //Set top right sprite
-        gSpriteClips[ 1 ].x = 500;
-        gSpriteClips[ 1 ].y =   0;
-        gSpriteClips[ 1 ].w = 500;
-        gSpriteClips[ 1 ].h = 500;
+    BITMAP bm;
+    GetObject(hBmp, sizeof(bm), &bm);
+    int width(bm.bmWidth), height(bm.bmHeight);
 
-        gButtons[1] = LButton();
+    BITMAPINFOHEADER bminfoheader;
+    ::ZeroMemory(&bminfoheader, sizeof(BITMAPINFOHEADER));
+    bminfoheader.biSize = sizeof(BITMAPINFOHEADER);
+    bminfoheader.biWidth       = width;
+    bminfoheader.biHeight      = -height;
+    bminfoheader.biPlanes      = 1;
+    bminfoheader.biBitCount    = 32;
+    bminfoheader.biCompression = BI_RGB;
+    bminfoheader.biSizeImage = width * 4 * height;
+    bminfoheader.biClrUsed = 0;
+    bminfoheader.biClrImportant = 0;
+
+    unsigned char* pPixels = new unsigned char[(width * 4 * height)];
+    if( !GetDIBits(CreateCompatibleDC(0), hBmp, 0, height, pPixels, (BITMAPINFO*) &bminfoheader, DIB_RGB_COLORS)) // load pixel info 
+    { 
+    //return if fails but first delete the resources
+    DeleteObject(hBmp);
+    delete [] pPixels; // delete the array of objects
+
+    return false;
+    }
+
+    HRGN hRgn, hRgnTemp;
+    COLORREF mask_color;
+
+    int x = 0, y = 0; // fill the x and y coordinate
+
+    unsigned char r = pPixels[(width*y+x) * 4 + 2];
+    unsigned char g = pPixels[(width*y+x) * 4 + 1];
+    unsigned char b = pPixels[(width*y+x) * 4 + 0]; 
+
+    mask_color = RGB(r,g,b);
+
+    hRgn = CreateRectRgn(0,0, width, height);
+    for (x = 0; x < width; x++)
+    {
+        for (y = 0; y < height; y++)
+        {
+            r = pPixels[(width*y+x) * 4 + 2];
+            g = pPixels[(width*y+x) * 4 + 1];
+            b = pPixels[(width*y+x) * 4 + 0]; 
+
+            if (RGB(r,g,b) == mask_color)
+            {
+                hRgnTemp = CreateRectRgn(x,y, x+1,y+1);
+                CombineRgn(hRgn, hRgn, hRgnTemp, RGN_DIFF);
+                DeleteObject(hRgnTemp);
+            }
+        }
+    }
+
+//clean up the bitmap and buffer unless you still need it
+    DeleteObject(hBmp);
+    delete [] pPixels; // delete the array of objects
+
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    SDL_GetWindowWMInfo(screen, &wmInfo);
+    HWND hwnd = wmInfo.info.win.window;
+    if (hwnd != NULL)
+    {
+        printf_s("got window handle\n");
         
-        //Set bottom left sprite
-        gSpriteClips[ 2 ].x =   0;
-        gSpriteClips[ 2 ].y = 500;
-        gSpriteClips[ 2 ].w = 500;
-        gSpriteClips[ 2 ].h = 500;
-
-        gButtons[2] = LButton();
-
-        //Set bottom right sprite
-        gSpriteClips[ 3 ].x = 500;
-        gSpriteClips[ 3 ].y = 500;
-        gSpriteClips[ 3 ].w = 500;
-        gSpriteClips[ 3 ].h = 500;
-
-        gButtons[3] = LButton();
+        BOOL bRedraw = true;
+        SetWindowRgn(hwnd, hRgn, bRedraw);
     }
 
     return success;
@@ -439,7 +488,7 @@ int main(int argc, char* args[])
                 
             }
         }
-
+    
         const Uint8* currentKeyStates = SDL_GetKeyboardState( NULL );
         if (currentKeyStates[SDL_SCANCODE_UP])
         {
@@ -461,23 +510,26 @@ int main(int argc, char* args[])
             sprite = BUTTON_SPRITE_MOUSE_DOWN;
         }
 
-        timeText.str("");
-        timeText << "Milliseconds since start time " << SDL_GetTicks() - startTime;
+        //timeText.str("");
+        //timeText << "Milliseconds since start time " << SDL_GetTicks() - startTime;
 
 
-        if (!gTexture.loadFromRenderedText(timeText.str().c_str(), textColor))
-        {
-            printf_s("cannot render text");
-        }
+        //if (!gTexture.loadFromRenderedText(timeText.str().c_str(), textColor))
+        //{
+        //    printf_s("cannot render text");
+        //}
 
-        SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+        SDL_SetRenderDrawColor(sdlRenderer, 0xFF, 0xFF, 0xFF, 0x0F);
         SDL_RenderClear(sdlRenderer);
+        
         
         //SDL_Rect* currentClip = &gSpriteClips[frame / 4];
         //gTexture.render((SCREEN_WIDTH - currentClip->w) / 2, (SCREEN_HEIGHT - currentClip->h)/2, currentClip);
         //gTexture.render(0,0,&gSpriteClips[sprite]);
-        gTexture.render((SCREEN_WIDTH - gTexture.getWidth()) / 2, 0);
-        gTextTexture.render((SCREEN_WIDTH - gTexture.getWidth())/2, (SCREEN_HEIGHT - gTexture.getHeight() ) / 2);
+        //gTexture.render((SCREEN_WIDTH - gTexture.getWidth()) / 2, 0);
+        //gTextTexture.render((SCREEN_WIDTH - gTexture.getWidth())/2, (SCREEN_HEIGHT - gTexture.getHeight() ) / 2);
+        //gTexture.render(-8,-31);
+        gTexture.render(0,0);
 
         SDL_RenderPresent(sdlRenderer);
     }
